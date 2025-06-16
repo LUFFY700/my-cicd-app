@@ -2,89 +2,94 @@ pipeline {
     agent any
 
     environment {
-        // IMPORTANT: Make sure this name matches the Node.js tool name in Jenkins (e.g., 'NodeJS_24.2.0')
-        NODE_VERSION = 'NodeJS_24.2.0' // <--- Update this if your Node.js tool name is different!
-
-        IMAGE_TAG = "v1.0"
-        // It's generally safer to use built-in BRANCH_NAME for Multibranch Pipelines if possible,
-        // but this 'sh' command should also work if git is available early enough.
-        // BRANCH_NAME = sh(returnStdout: true, script: "git rev-parse --abbrev-ref HEAD").trim()
+        NODE_VERSION = 'NodeJS_24.2.0'
+        IMAGE_TAG = "v1.0" // Consider making this dynamic, e.g., ${BUILD_NUMBER}
+        // BRANCH_NAME is automatically provided by Multibranch Pipeline projects
     }
 
     tools {
-        // This makes 'npm' available in the PATH for subsequent steps
         nodejs env.NODE_VERSION
     }
 
     stages {
-        // Checkout the source code from the SCM (Git repository)
         stage('Checkout') {
             steps {
-                // checkout scm is good for Multibranch Pipelines
                 checkout scm
             }
         }
 
-        // Install application dependencies
         stage('Build') {
             steps {
-                // 'npm' will now be found because of the 'tools' block
                 sh 'npm install'
             }
         }
 
-        // Run tests to verify the application
         stage('Test') {
             steps {
                 sh 'npm test'
             }
         }
 
-        // Build the Docker image dynamically based on the branch
         stage('Build Docker Image') {
             steps {
                 script {
-                    // Get the branch name directly from Jenkins environment variables
-                    // Assuming BRANCH_NAME is set by Multibranch Pipeline or a previous step
-                    def currentBranchName = env.BRANCH_NAME // Using env.BRANCH_NAME
-                    if (!currentBranchName) {
-                         // Fallback if env.BRANCH_NAME isn't set, might need to re-add sh 'git rev-parse'
-                         // But for multibranch, env.BRANCH_NAME should be present.
-                         currentBranchName = sh(returnStdout: true, script: "git rev-parse --abbrev-ref HEAD").trim()
+                    // env.BRANCH_NAME is the standard way to get the branch name in Multibranch Pipelines
+                    // No need for a fallback 'git rev-parse' here, it's already set.
+                    def currentBranchName = env.BRANCH_NAME
+
+                    // Define image name based on branch, could be more elaborate
+                    def imageName
+                    if (currentBranchName == 'main') {
+                        imageName = "my-app-main:${env.IMAGE_TAG}"
+                    } else if (currentBranchName == 'dev') {
+                        imageName = "my-app-dev:${env.IMAGE_TAG}"
+                    } else {
+                        // For feature branches, use the branch name in the tag or image name
+                        // Be careful with special characters in branch names for Docker tags.
+                        // Often, you might slugify or hash the branch name.
+                        // For simplicity here, let's just use a generic 'feature' prefix for now
+                        // or even directly use the branch name in the tag.
+                        imageName = "my-app-${currentBranchName.toLowerCase().replaceAll(/[^a-z0-9_.-]/, '-')}:${env.IMAGE_TAG}"
                     }
 
-                    // Use branch-specific image names
-                    def imageName = (currentBranchName == 'main') ? "nodemain:${env.IMAGE_TAG}" : "nodedev:${env.IMAGE_TAG}"
+                    echo "Building Docker image: ${imageName}"
                     sh "docker build -t ${imageName} ."
                 }
             }
         }
 
-        // Deploy the application in a Docker container
         stage('Deploy') {
             steps {
                 script {
-                    // Get the branch name directly from Jenkins environment variables
-                    def currentBranchName = env.BRANCH_NAME // Using env.BRANCH_NAME
-                    if (!currentBranchName) {
-                         currentBranchName = sh(returnStdout: true, script: "git rev-parse --abbrev-ref HEAD").trim()
+                    def currentBranchName = env.BRANCH_NAME
+
+                    def imageName // Image name must match what was built in the previous stage
+                    def deployPort // Port to map on the host
+
+                    if (currentBranchName == 'main') {
+                        imageName = "my-app-main:${env.IMAGE_TAG}"
+                        deployPort = "3000" // Main app on 3000
+                    } else if (currentBranchName == 'dev') {
+                        imageName = "my-app-dev:${env.IMAGE_TAG}"
+                        deployPort = "3001" // Dev app on 3001
+                    } else {
+                        // For feature branches, you might deploy them to unique ports or environments
+                        // For simplicity, let's say all other branches get port 3002
+                        // Or, you could generate a unique port based on the branch hash for more complex setups.
+                        imageName = "my-app-${currentBranchName.toLowerCase().replaceAll(/[^a-z0-9_.-]/, '-')}:${env.IMAGE_TAG}"
+                        deployPort = "3002" // Feature branches on 3002
                     }
 
-                    // Use branch-specific image names and ports
-                    def imageName = (currentBranchName == 'main') ? "nodemain:${env.IMAGE_TAG}" : "nodedev:${env.IMAGE_TAG}"
-                    def port = (currentBranchName == 'main') ? "3000" : "3001" // Ports are now correctly string literals
-
-                    // Stop and remove any existing container for this branch
+                    echo "Stopping any running containers for ${imageName}..."
                     sh """
-                        echo "Stopping any running containers for ${imageName}..."
                         docker ps -q --filter "ancestor=${imageName}" | xargs -r docker stop || true
                         docker ps -aq --filter "ancestor=${imageName}" | xargs -r docker rm || true
-
-                        echo "Deploying new container for ${imageName}..."
-                        docker run -d -p ${port}:3000 ${imageName}
                     """
 
-                    // Optional cleanup of unused images to free space
+                    echo "Deploying new container for ${imageName} on host port ${deployPort}..."
+                    sh "docker run -d -p ${deployPort}:3000 ${imageName}" // Assuming internal container port is 3000
+                    
+                    // Optional cleanup of unused images
                     sh 'docker image prune -f || true'
                 }
             }
@@ -92,7 +97,6 @@ pipeline {
     }
 
     post {
-        // Notify or perform cleanup after successful or failed pipelines
         always {
             echo 'Pipeline finished.'
         }

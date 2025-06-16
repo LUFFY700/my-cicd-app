@@ -9,7 +9,7 @@ pipeline {
         // Determine Docker image name and application port based on the branch
         DOCKER_IMAGE_NAME = "node-app-${BRANCH_NAME == 'main' ? 'main' : 'dev'}"
         DOCKER_IMAGE_TAG = 'v1.0' // Our default image tag
-        APP_PORT = BRANCH_NAME == 'main' ? '3000' : '3001' // Main on 3000, Dev on 3001
+        APP_PORT = (BRANCH_NAME == 'main') ? "3000" : "3001" // Main on 3000, Dev on 3001
         CONTAINER_NAME = "app-${BRANCH_NAME}" // Unique container name per branch
     }
 

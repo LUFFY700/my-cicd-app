@@ -3,7 +3,8 @@ pipeline {
 
     environment {
         // This name must match the NodeJS tool name you configured in Jenkins (e.g., NodeJS_24.2.0)
-        NODE_VERSION = 'NodeJS_24.2.0' // <--- IMPORTANT: Update this to your exact NodeJS tool name in Jenkins!
+        // IMPORTANT: Update 'NodeJS_24.2.0' below if your Jenkins NodeJS tool has a different name!
+        NODE_VERSION = 'NodeJS_24.2.0' 
 
         // Determine Docker image name and application port based on the branch
         DOCKER_IMAGE_NAME = "node-app-${BRANCH_NAME == 'main' ? 'main' : 'dev'}"
@@ -13,7 +14,7 @@ pipeline {
     }
 
     tools {
-        // Use the NodeJS tool configured globally in Jenkins
+        // Use the NodeJS tool configured globally in Jenkins, referenced by its name
         nodejs env.NODE_VERSION
     }
 
@@ -23,9 +24,9 @@ pipeline {
                 script {
                     echo "Checking out ${env.BRANCH_NAME} branch from Git..."
                     // Git clone operation.
-                    // REPLACE with your actual GitHub repository URL (HTTPS URL from your GitHub repo)
-                    // REPLACE 'github-pipeline-pat' with your exact Credentials ID!
-                    git branch: "${env.BRANCH_NAME}", credentialsId: 'github-pipeline-pat', url: 'https://github.com/LUFFY700/my-cicd-app' // <--- REPLACE THIS LINE WITH YOUR REPO URL AND CREDENTIALS ID!
+                    // IMPORTANT: REPLACE 'https://github.com/LUFFY700/my-cicd-app' with YOUR ACTUAL GitHub repository URL.
+                    // IMPORTANT: REPLACE 'github-pipeline-pat' with YOUR EXACT Credentials ID you set in Jenkins!
+                    git branch: "${env.BRANCH_NAME}", credentialsId: 'github-pipeline-pat', url: 'https://github.com/LUFFY700/my-cicd-app' 
                 }
             }
         }
